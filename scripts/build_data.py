@@ -80,9 +80,10 @@ def main():
     if missing:
         sys.exit(f"엑셀 머리글을 찾을 수 없어요: {missing}")
 
+    # 쉽게 말하면 · 선배 팁 · 검수자 열은 있으면 쓰고, 없어도 돼요
     rows = []
     for r, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        g = lambda h, row=row: row[col[h]]
+        g = lambda h, row=row: row[col[h]] if h in col else None
         if not g("용어명") and not g("표시 이름"):
             continue
         rows.append((r, g))
@@ -111,11 +112,13 @@ def main():
             "aliases": split_list(g("별칭")),
             "createdBy": "익명 선배" if by in ANON else by,
             "createdAt": updated, "updatedAt": updated,
-            "reviewStatus": status, "reviewedBy": None,
+            "reviewStatus": status, "reviewedBy": str(g("검수자") or "").strip() or None,
             "source": str(g("출처 / 비고") or "").strip(),
             "views": 0,
             "_related_raw": split_list(g("관련 용어 및 연관 키워드")),
             "_examples": split_examples(g("업무 상황별 사용 예시")),
+            "_easy": str(g("쉽게 말하면") or "").strip(),
+            "_tip": str(g("선배 팁") or "").strip(),
         })
         rank = g("많이 찾은 말 순위")
         if rank not in (None, ""):
@@ -143,12 +146,17 @@ def main():
             elif word not in keywords:
                 keywords.append(word)
         by = t["createdBy"]
+        easy, tip = t.pop("_easy"), t.pop("_tip")
         details[t["id"]] = {
             "examples": [{"where": "", "text": e, "by": by} for e in t.pop("_examples")],
             "related": related,
             "keywords": keywords,
             "history": [{"date": t["updatedAt"], "by": by, "what": "용어집에 등록했어요"}],
         }
+        if easy:
+            details[t["id"]]["easy"] = easy
+        if tip:
+            details[t["id"]]["tip"] = tip
 
     # 카테고리 카드에 보여줄 대표 용어 (첫 주 필수 → 한 달 → 나중 순)
     order = {"week1": 0, "month1": 1, "later": 2}
@@ -174,7 +182,7 @@ def main():
         f"const TERMS = {json.dumps(terms, ensure_ascii=False, indent=2)};\n\n"
         f"const DETAILS = {json.dumps(details, ensure_ascii=False, indent=2)};\n\n"
         f"const POPULAR = {json.dumps(popular_ids, ensure_ascii=False)};\n\n"
-        "/* 다른 신입이 이미 요청한 단어 (요청 기능이 서버와 연결되면 채워져요) */\n"
+        "/* 요청 수는 앱이 구글 시트에서 직접 받아요 */\n"
         "const REQUESTS = [];\n"
     )
     OUT.write_text(js, encoding="utf-8")
