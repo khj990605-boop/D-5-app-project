@@ -1210,12 +1210,70 @@ function renderDetail(t) {
 }
 
 /* ───────── 등록 요청 폼 §2-6 ───────── */
-// 내가 보낸 요청: 이 브라우저에만 기억 → 같은 단어를 다시 검색하면 "요청 n건"으로 보인다
+// 내가 보낸 요청: 이 브라우저에도 기억 → 같은 단어를 다시 검색하면 "내가 요청한 단어"로 보인다
 const MYREQ_KEY = "newbikey.myRequests";
 const myRequests = (() => { try { return JSON.parse(localStorage.getItem(MYREQ_KEY) || "[]"); } catch { return []; } })();
 // 예시 요청 단어 중 이 브라우저에서 이미 궁금해요/요청한 단어는 1건 더해서 보여준다
 REQUESTS.forEach((r) => { if (metoo.has(norm(r.word))) r.count += 1; });
 myRequests.forEach((r) => { if (!findRequest(r.word)) REQUESTS.push({ word: r.word, aliases: [], count: 1 }); metoo.add(norm(r.word)); });
+
+/* ───────── 요청을 구글 시트로 보내기 ─────────
+   받는 곳: 팀 공유 드라이브의 「뉴비키 등록 요청」 구글 시트 (Apps Script 웹 앱)
+   - 요청하기 · 나도 궁금해요 → 시트 「요청」 탭에 한 줄씩 쌓여요 (이름은 보내지 않아요)
+   - 앱이 열릴 때 단어별 요청 수를 읽어 와서 "요청 n건"에 써요 (모든 사람의 요청을 합친 숫자)
+   - 인터넷이 끊겨 못 보낸 요청은 이 브라우저에 모아 뒀다가, 다음에 열 때 다시 보내요
+   Apps Script를 새로 배포해서 주소가 바뀌면 아래 REQUEST_API만 바꾸면 돼요 */
+const REQUEST_API = "https://script.google.com/macros/s/AKfycbwyeJk2ipw3e9of-lSM5LI2uhqdi74ljmw5HMT6fbKaOuSUZE9lHXbVZboUWdi7voB05A/exec";
+const OUTBOX_KEY = "newbikey.outbox";
+const OUTBOX_MAX = 20;
+const outbox = (() => { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || "[]"); } catch { return []; } })();
+const saveOutbox = () => { try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(outbox)); } catch {} };
+
+// 모아 둔 요청을 순서대로 보낸다. 전부 보냈으면 true, 중간에 실패하면 false
+let flushing = null;
+function flushOutbox() {
+  if (flushing) return flushing;
+  flushing = (async () => {
+    while (outbox.length) {
+      let data;
+      try {
+        // text/plain으로 보내야 브라우저가 사전 확인(CORS preflight) 없이 바로 보내요
+        const res = await fetch(REQUEST_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(outbox[0]) });
+        data = await res.json();
+      } catch { return false; } // 인터넷 문제 → 남겨 뒀다가 다음에 다시
+      outbox.shift(); saveOutbox(); // 시트가 거절한 요청(빈 단어 등)은 다시 보내지 않아요
+      if (!data.ok) console.warn("요청이 저장되지 않았어요:", data.error);
+    }
+    return true;
+  })().finally(() => { flushing = null; });
+  return flushing;
+}
+function sendToSheet(payload) {
+  outbox.push({ ...payload, at: new Date().toISOString() });
+  while (outbox.length > OUTBOX_MAX) outbox.shift();
+  saveOutbox();
+  return flushOutbox();
+}
+
+// 시트에서 단어별 요청 수를 받아 REQUESTS를 채운다. 실패하면 이 브라우저 기록만으로 동작해요
+async function loadRequestCounts() {
+  try {
+    const res = await fetch(REQUEST_API);
+    const data = await res.json();
+    if (!data.ok || !Array.isArray(data.requests)) return;
+    data.requests.forEach((s) => {
+      const word = String(s.word || "").trim(), count = Number(s.count) || 0;
+      if (!word || count < 1) return;
+      const r = findRequest(word);
+      // 내가 보낸 요청은 시트 숫자에도 이미 들어 있으니 더하지 않고 큰 쪽을 쓴다
+      if (r) r.count = Math.max(r.count, count);
+      else REQUESTS.push({ word, aliases: [], count });
+    });
+    // 숫자를 받기 전에 "검색 결과 없음" 화면을 열어 뒀다면 새 숫자로 다시 그린다
+    if (location.hash === "#notfound" && nfQuery && !notFoundView.hidden) notFoundView.innerHTML = renderNotFound(nfQuery);
+  } catch {}
+}
+flushOutbox().finally(loadRequestCounts);
 
 const WHERE_CHIPS = ["팀 회의", "메신저", "고객 미팅", "메일", "선배와 대화"];
 const WORD_MAX = 30;
@@ -1341,9 +1399,11 @@ function submitRequest() {
   metoo.add(norm(word)); saveMetoo([...metoo]);
   myRequests.push({ word, where: rq.where, guess: rq.guess, anon: rq.anon, at: new Date().toISOString() });
   try { localStorage.setItem(MYREQ_KEY, JSON.stringify(myRequests)); } catch {}
+  const payload = { type: "request", word, where: rq.where.trim(), guess: rq.guess.trim() };
   rq = null;
   location.hash = "";
-  toast("요청을 보냈어요. 등록되면 알려드릴게요");
+  toast("요청을 보내고 있어요");
+  sendToSheet(payload).then((ok) => toast(ok ? "요청을 보냈어요. 등록되면 알려드릴게요" : "지금은 요청을 보내지 못했어요. 다음에 뉴비키를 열 때 다시 보낼게요"));
 }
 
 function leaveRequest() {
@@ -1581,7 +1641,7 @@ document.addEventListener("click", (e) => {
     req.count += 1;
     $("#nfCount").textContent = req.count;
     t.disabled = true; t.textContent = "궁금해요를 보냈어요";
-    toast("선배들에게 한 번 더 알렸어요");
+    sendToSheet({ type: "metoo", word: req.word }).then((ok) => toast(ok ? "선배들에게 한 번 더 알렸어요" : "지금은 보내지 못했어요. 다음에 뉴비키를 열 때 다시 보낼게요"));
     return;
   }
   if (t.hasAttribute("data-research")) { openModal(nfQuery); return; }
