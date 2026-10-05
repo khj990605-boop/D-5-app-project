@@ -245,6 +245,11 @@ footer { padding-block: 32px 48px; color: var(--color-text-tertiary); font-size:
 .nav-item .cat-count { margin-left: auto; }
 
 /* ── 토스트 §6-7 ── */
+/* 용어를 불러오는 동안 보이는 회색 블록 §6-7 */
+.skel { min-height: 120px; border-radius: var(--radius-lg); background: var(--color-bg-muted); animation: skel 1.2s ease-in-out infinite; }
+@keyframes skel { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
 .toast {
   position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); transform: translateX(-50%);
   background: var(--color-toast); color: var(--color-on-dark); padding: 12px 16px; border-radius: var(--radius-md);
@@ -691,17 +696,66 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-<!-- 용어 데이터 (엑셀에서 자동 생성) -->
+<!-- 비상용 용어 데이터 (엑셀에서 자동 생성). 구글 시트를 읽지 못할 때만 써요 -->
 <script src="data.js"></script>
 
 <script>
-/* ───────── 데이터 준비 ─────────
-   CATEGORIES · TERMS · DETAILS · POPULAR · REQUESTS 는 data.js에 있어요.
-   data.js는 data/회계법인_용어집.xlsx 를 scripts/build_data.py로 변환해서 만들어요. */
-if (typeof TERMS === "undefined") {
-  document.body.innerHTML = '<p style="padding:24px;font-family:sans-serif">data.js를 불러오지 못했어요. index.html과 같은 폴더에 data.js가 있는지 확인해 주세요.</p>';
-  throw new Error("data.js not loaded");
-}
+/* ───────── 용어 불러오기 ─────────
+   1순위: 「뉴비키 용어집」 구글 시트 — Apps Script 웹 앱이 읽어서 보내 줘요.
+          그래서 용어집 시트를 고치고 앱을 새로고침하면 바로 반영돼요.
+   2순위: 이 브라우저에 저장해 둔 "마지막으로 읽은 시트 내용" — 구글에 연결이 안 될 때
+   3순위: data.js — 엑셀에서 만든 비상용 데이터 (처음 여는데 구글도 안 될 때)
+   웹 앱 주소가 바뀌면 아래 NEWBIKEY_API만 바꾸면 돼요 (요청 보내기도 같은 주소를 써요) */
+const NEWBIKEY_API = "https://script.google.com/macros/s/AKfycbwyeJk2ipw3e9of-lSM5LI2uhqdi74ljmw5HMT6fbKaOuSUZE9lHXbVZboUWdi7voB05A/exec";
+
+(function boot() {
+  const CACHE_KEY = "newbikey.sheetTerms";
+  const TIMEOUT = 8000; // 8초 안에 답이 없으면 저장본으로
+  const valid = (d) => d && Array.isArray(d.categories) && Array.isArray(d.terms) && d.terms.length > 0 && d.details && Array.isArray(d.popular);
+  const pick = (d) => ({ CATEGORIES: d.categories, TERMS: d.terms, DETAILS: d.details, POPULAR: d.popular });
+
+  // 불러오는 동안 카드 자리에 회색 블록
+  const skel = '<div class="skel" aria-hidden="true"></div>'.repeat(3);
+  ["catGrid", "recentGrid"].forEach((id) => { const el = document.getElementById(id); if (el) el.innerHTML = skel; });
+  const total = document.getElementById("totalCount"); if (total) total.textContent = "…";
+
+  const ctrl = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, TIMEOUT);
+
+  fetch(NEWBIKEY_API, ctrl ? { signal: ctrl.signal } : {})
+    .then((res) => res.json())
+    .then((res) => {
+      if (res && res.termError) console.warn("뉴비키 용어집 시트:", res.termError);
+      const requests = res && res.ok && Array.isArray(res.requests) ? res.requests : null;
+      if (res && res.ok && valid(res.terms)) {
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify(res.terms)); } catch {}
+        return { ...pick(res.terms), sheetRequests: requests, source: "sheet" };
+      }
+      return { sheetRequests: requests, source: "" };
+    })
+    .catch(() => ({ sheetRequests: null, source: "" }))
+    .then((D) => {
+      clearTimeout(timer);
+      if (!D.source) {
+        let cached = null;
+        try { cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null"); } catch {}
+        if (valid(cached)) Object.assign(D, pick(cached), { source: "cache" });
+        else if (typeof TERMS !== "undefined") Object.assign(D, { CATEGORIES, TERMS, DETAILS, POPULAR, source: "file" });
+        else {
+          document.body.innerHTML = '<p style="padding:24px;font-family:sans-serif">용어를 불러오지 못했어요. 잠시 후 새로고침해 주세요.</p>';
+          return;
+        }
+        console.info("뉴비키: 구글 시트를 읽지 못해서 " + (D.source === "cache" ? "마지막으로 읽은 시트 내용으로" : "비상용 data.js로") + " 보여줘요");
+      }
+      startApp(D);
+    });
+})();
+
+/* ───────── 앱 시작 ─────────
+   D: { CATEGORIES, TERMS, DETAILS, POPULAR, sheetRequests, source } */
+function startApp(D) {
+const { CATEGORIES, TERMS, DETAILS, POPULAR } = D;
+const REQUESTS = []; // 다른 신입이 요청한 단어. 시트에서 받은 요청 수로 채워요
 // 예시 수는 실제 예시 개수를 따른다
 TERMS.forEach((t) => { const d = DETAILS[t.id]; t.examples = d && d.examples ? d.examples.length : 0; t.views = t.views || 0; });
 // 카테고리 용어 수는 실제 데이터에서 센다 (홈 숫자와 카테고리 화면 숫자가 항상 같게)
@@ -1222,8 +1276,8 @@ myRequests.forEach((r) => { if (!findRequest(r.word)) REQUESTS.push({ word: r.wo
    - 요청하기 · 나도 궁금해요 → 시트 「요청」 탭에 한 줄씩 쌓여요 (이름은 보내지 않아요)
    - 앱이 열릴 때 단어별 요청 수를 읽어 와서 "요청 n건"에 써요 (모든 사람의 요청을 합친 숫자)
    - 인터넷이 끊겨 못 보낸 요청은 이 브라우저에 모아 뒀다가, 다음에 열 때 다시 보내요
-   Apps Script를 새로 배포해서 주소가 바뀌면 아래 REQUEST_API만 바꾸면 돼요 */
-const REQUEST_API = "https://script.google.com/macros/s/AKfycbwyeJk2ipw3e9of-lSM5LI2uhqdi74ljmw5HMT6fbKaOuSUZE9lHXbVZboUWdi7voB05A/exec";
+   주소는 맨 위 NEWBIKEY_API 한 곳에서 관리해요 */
+const REQUEST_API = NEWBIKEY_API;
 const OUTBOX_KEY = "newbikey.outbox";
 const OUTBOX_MAX = 20;
 const outbox = (() => { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || "[]"); } catch { return []; } })();
@@ -1255,25 +1309,32 @@ function sendToSheet(payload) {
   return flushOutbox();
 }
 
-// 시트에서 단어별 요청 수를 받아 REQUESTS를 채운다. 실패하면 이 브라우저 기록만으로 동작해요
+// 시트에서 받은 단어별 요청 수로 REQUESTS를 채운다
+function applyRequestCounts(list, repaint) {
+  if (!Array.isArray(list)) return;
+  list.forEach((x) => {
+    const word = String(x.word || "").trim(), count = Number(x.count) || 0;
+    if (!word || count < 1) return;
+    const r = findRequest(word);
+    // 내가 보낸 요청은 시트 숫자에도 이미 들어 있으니 더하지 않고 큰 쪽을 쓴다
+    if (r) r.count = Math.max(r.count, count);
+    else REQUESTS.push({ word, aliases: [], count });
+  });
+  // 숫자를 받기 전에 "검색 결과 없음" 화면을 열어 뒀다면 새 숫자로 다시 그린다
+  if (repaint && location.hash === "#notfound" && nfQuery && !notFoundView.hidden) notFoundView.innerHTML = renderNotFound(nfQuery);
+}
+// 요청 수만 다시 받기 (못 보낸 요청을 방금 보냈거나, 처음에 시트를 못 읽었을 때)
 async function loadRequestCounts() {
   try {
-    const res = await fetch(REQUEST_API);
+    const res = await fetch(REQUEST_API + "?only=requests");
     const data = await res.json();
-    if (!data.ok || !Array.isArray(data.requests)) return;
-    data.requests.forEach((s) => {
-      const word = String(s.word || "").trim(), count = Number(s.count) || 0;
-      if (!word || count < 1) return;
-      const r = findRequest(word);
-      // 내가 보낸 요청은 시트 숫자에도 이미 들어 있으니 더하지 않고 큰 쪽을 쓴다
-      if (r) r.count = Math.max(r.count, count);
-      else REQUESTS.push({ word, aliases: [], count });
-    });
-    // 숫자를 받기 전에 "검색 결과 없음" 화면을 열어 뒀다면 새 숫자로 다시 그린다
-    if (location.hash === "#notfound" && nfQuery && !notFoundView.hidden) notFoundView.innerHTML = renderNotFound(nfQuery);
+    if (data.ok) applyRequestCounts(data.requests, true);
   } catch {}
 }
-flushOutbox().finally(loadRequestCounts);
+// 처음 열 때: 용어와 함께 받은 요청 수를 바로 쓰고, 못 보낸 요청이 있으면 보낸 뒤 숫자를 다시 받는다
+const hadOutbox = outbox.length > 0;
+applyRequestCounts(D.sheetRequests, false);
+flushOutbox().then(() => { if (hadOutbox || !D.sheetRequests) loadRequestCounts(); });
 
 const WHERE_CHIPS = ["팀 회의", "메신저", "고객 미팅", "메일", "선배와 대화"];
 const WORD_MAX = 30;
@@ -1686,6 +1747,7 @@ document.querySelectorAll("[data-clear]").forEach((btn) => {
 
 window.addEventListener("hashchange", route);
 route();
+}
 </script>
 
 </body>
