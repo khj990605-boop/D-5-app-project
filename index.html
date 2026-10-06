@@ -799,7 +799,6 @@ CATEGORIES.forEach((c) => { c.count = TERMS.filter((t) => t.category === c.id).l
 const CAT_DESC = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.desc || ""]));
 CAT_DESC.all = "뉴비키에 등록된 모든 용어예요.";
 
-const LEVELS = { week1: "🌱 입사 첫 주 필수", month1: "🌿 한 달 안에", later: "🌳 알아두면 좋아요" };
 const REVIEW = { approved: "✅ 검수 완료", pending: "🔍 검토 중", needs_fix: "⚠️ 수정 필요" };
 const TODAY = new Date(new Date().toDateString()); // 오늘 날짜 (NEW 표시 · 오래된 정보 안내 기준)
 
@@ -1035,7 +1034,6 @@ function termCardHtml(t, opts = {}) {
   <button class="term-card" type="button" data-term="${t.id}">
     <span class="term-meta">
       <span class="chip-cat"><span class="dot dot-${c.color}" aria-hidden="true"></span>${esc(c.name)}</span>
-      <span class="badge badge-level">${LEVELS[t.level]}</span>
       ${isNew(t.createdAt) ? '<span class="badge badge-new">NEW</span>' : ""}
     </span>
     <span class="term-name">${esc(t.name)}</span>
@@ -1233,7 +1231,6 @@ function renderDetail(t) {
         ${d.origin ? `<p class="d-origin">${esc(d.origin)}</p>` : t.aliases.length ? `<p class="d-origin">${t.aliases.map(esc).join(" · ")}</p>` : ""}
         <div class="d-chips">
           <span class="chip-cat"><span class="dot dot-${c.color}" aria-hidden="true"></span>${esc(c.name)}</span>
-          <span class="badge badge-level">${LEVELS[t.level]}</span>
           <span class="rv rv-${t.reviewStatus}">${REVIEW[t.reviewStatus]}</span>
           ${isNew(t.createdAt) ? '<span class="badge badge-new">NEW</span>' : ""}
         </div>
@@ -1544,14 +1541,12 @@ requestView.addEventListener("click", (e) => {
 });
 
 /* ───────── 카테고리 §2-2 ───────── */
-const catFilter = { level: "all", sort: "recent" }; // 카테고리를 옮겨도 고른 필터 유지
-const LEVEL_CHIPS = [["all", "전체"], ["week1", LEVELS.week1], ["month1", LEVELS.month1], ["later", LEVELS.later]];
+const catFilter = { sort: "recent" }; // 카테고리를 옮겨도 고른 정렬 유지 (난이도 구분은 2026.10.06에 없앴어요)
 const SORT_CHIPS = [["recent", "최근 추가 순"], ["popular", "많이 찾은 순"]];
 
 function catTerms(catId) {
   let list = TERMS.filter((t) => catId === "all" || t.category === catId);
   const total = list.length;
-  if (catFilter.level !== "all") list = list.filter((t) => t.level === catFilter.level);
   list.sort(catFilter.sort === "popular"
     ? (a, b) => b.views - a.views || a.name.localeCompare(b.name, "ko")
     : (a, b) => b.createdAt.localeCompare(a.createdAt) || a.name.localeCompare(b.name, "ko"));
@@ -1560,13 +1555,13 @@ function catTerms(catId) {
 
 function catGridHtml(catId) {
   const { list, total } = catTerms(catId);
-  const line = catFilter.level === "all" ? `${total}개 모두 보는 중` : `${total}개 중 ${list.length}개 · ${LEVELS[catFilter.level]}`;
+  const line = `${total}개 모두 보는 중`;
   const body = list.length
     ? `<div class="cat-grid">${list.map((t) => termCardHtml(t, { views: catFilter.sort === "popular" })).join("")}</div>`
     : `<div class="cat-empty"><span aria-hidden="true" style="font-size:32px;line-height:40px">🔍</span>
-        <strong>이 난이도의 용어는 아직 없어요</strong>
-        <span>다른 난이도를 골라보거나, 궁금한 단어를 요청해 주세요.</span>
-        <button class="btn btn-secondary" type="button" data-level="all">난이도 전체 보기</button></div>`;
+        <strong>이 카테고리에는 아직 용어가 없어요</strong>
+        <span>궁금한 단어가 있다면 요청해 주세요.</span>
+        <button class="btn btn-secondary" type="button" data-action="request">익명으로 요청하기</button></div>`;
   return `<p class="result-line" aria-live="polite">${line}</p>${body}`;
 }
 
@@ -1586,9 +1581,6 @@ function renderCategory(catId) {
         <p class="cat-sub">용어 <b>${count}개</b> · ${esc(CAT_DESC[catId])}</p>
       </header>
       <div class="filters">
-        <div class="filter-row" role="group" aria-label="난이도">
-          <span class="filter-label">난이도</span>${LEVEL_CHIPS.map((x) => chip("level", x)).join("")}
-        </div>
         <div class="filter-row" role="group" aria-label="정렬">
           <span class="filter-label">정렬</span>${SORT_CHIPS.map((x) => chip("sort", x)).join("")}
         </div>
@@ -1601,14 +1593,11 @@ function renderCategory(catId) {
 const categoryView = $("#categoryView");
 let catCurrent = null;
 categoryView.addEventListener("click", (e) => {
-  const b = e.target.closest("[data-level], [data-sort]");
+  const b = e.target.closest("[data-sort]");
   if (!b) return;
-  if (b.dataset.level) catFilter.level = b.dataset.level;
-  if (b.dataset.sort) catFilter.sort = b.dataset.sort;
-  categoryView.querySelectorAll("[data-level].f-chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.level === catFilter.level)));
+  catFilter.sort = b.dataset.sort;
   categoryView.querySelectorAll("[data-sort].f-chip").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.sort === catFilter.sort)));
   $("#catResults").innerHTML = catGridHtml(catCurrent);
-  if (!b.isConnected) categoryView.querySelector('[data-level="all"].f-chip').focus();
 });
 
 /* ───────── 화면 전환 ───────── */
@@ -1758,7 +1747,7 @@ document.addEventListener("click", (e) => {
   else {
     const a = t.dataset.action;
     if (a === "request") openRequest(t.dataset.word || "");
-    else if (a === "all") { catFilter.sort = "recent"; catFilter.level = "all"; location.hash = "cat-all"; }
+    else if (a === "all") { catFilter.sort = "recent"; location.hash = "cat-all"; }
     else toast("이 메뉴는 곧 연결돼요");
   }
   if (!$("#drawer").hidden && t.closest("#drawer")) closeMenu();
