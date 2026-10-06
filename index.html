@@ -577,6 +577,42 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+/* ── 익명 댓글 (용어 상세 맨 아래) · 기존 토큰·클래스만 사용 ── */
+.cmt { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.cmt-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.cmt-form { display: flex; flex-direction: column; gap: 8px; }
+.cmt-input { min-height: 128px; }
+.field-msg .count.over { color: var(--color-danger); font-weight: 500; }
+.cmt-actions { display: flex; justify-content: flex-end; padding-top: 4px; }
+.cmt-actions .btn-primary { width: auto; max-width: none; min-width: 160px; }
+.cmt-list { display: flex; flex-direction: column; gap: 16px; padding-top: 24px; border-top: 1px solid var(--color-border); }
+.cmt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cmt-total { font-size: 17px; line-height: 28px; font-weight: 600; color: var(--color-text); font-variant-numeric: tabular-nums; }
+.cmt-sort { font-size: 13px; line-height: 18px; color: var(--color-text-tertiary); }
+.cmt-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.cmt-item { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 20px 24px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg); }
+.cmt-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cmt-who { font-size: 15px; line-height: 24px; font-weight: 600; color: var(--color-text); white-space: nowrap; }
+.cmt-time { font-size: 13px; line-height: 18px; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmt-like {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 4px;
+  border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-tertiary);
+  font-size: 13px; line-height: 18px; font-weight: 500; font-variant-numeric: tabular-nums;
+  transition: color var(--duration-fast) var(--ease);
+}
+.cmt-like:hover:not(:disabled), .cmt-like[aria-pressed="true"] { color: var(--color-primary); }
+.cmt-like[aria-pressed="true"] svg { fill: currentColor; }
+.cmt-like:disabled, .cmt-like[aria-pressed="true"] { cursor: default; }
+.cmt-body { font-size: 15px; line-height: 24px; color: var(--color-text-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmt-skel { min-height: 88px; }
+@media (max-width: 767px) {
+  .cmt-input { min-height: 112px; }
+  .cmt-actions .btn-primary { width: 100%; }
+  .cmt-items { gap: 0; }
+  .cmt-item { padding: 18px 0; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; }
+  .cmt-item:last-child { border-bottom: 0; }
+  .cmt-like { min-height: 44px; min-width: 44px; justify-content: flex-end; }
+}
 </style>
 
 </head>
@@ -1254,6 +1290,8 @@ function renderDetail(t) {
           ${[...history].reverse().map((h) => `<li><time datetime="${h.date}">${fmt(h.date)}</time><span><b style="font-weight:500;color:var(--color-text-body)">${esc(h.by)}</b> · ${esc(h.what)}</span></li>`).join("")}
         </ol>
       </footer>
+
+      <section class="cmt" id="cmt" aria-label="익명 댓글"></section>
     </article>
 
     <nav class="toc" aria-label="이 페이지 목차">
@@ -1612,7 +1650,7 @@ function route() {
   if (view !== homeView || h === "" || h === "#") window.scrollTo(0, 0);
   if (view === requestView) paintRequest();
   if (focusEl) $(focusEl).focus({ preventScroll: true });
-  if (view === detailView) watchToc();
+  if (view === detailView) { watchToc(); loadComments(term); }
 }
 
 // 스크롤 위치에 맞춰 오른쪽 목차 강조
@@ -1744,6 +1782,189 @@ document.querySelectorAll("[data-clear]").forEach((btn) => {
     }
   });
 });
+
+/* ───────── 익명 댓글 ─────────
+   용어 상세 맨 아래에 붙어요. 댓글·좋아요는 「뉴비키 등록 요청」 시트의 「댓글」·「좋아요」 탭에 저장돼요.
+   (Apps Script 코드: 저장소의 apps-script/comments.gs)
+   - 익명 번호와 "같은 브라우저 좋아요 1번"은 Apps Script가 잠금(LockService)을 걸고 처리해요
+   - newbikey.browserId: 좋아요 중복을 막는 용도로만 쓰는 이 브라우저의 무작위 ID
+   - 댓글을 못 불러와도 상세 화면의 나머지는 그대로 보여요 */
+const CMT_MAX = 500;
+const CMT_TIMEOUT = 8000;
+const BROWSER_KEY = "newbikey.browserId";
+const cmt = { term: null, seq: 0, list: [], status: "idle", sending: false, liking: new Set() };
+const heartSvg = '<svg class="i i-16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.3s-7.6-4.6-9.4-9.3C1.3 7.7 3.3 4.4 6.8 4.4c2.1 0 3.6 1.1 5.2 3.1 1.6-2 3.1-3.1 5.2-3.1 3.5 0 5.5 3.3 4.2 6.6-1.8 4.7-9.4 9.3-9.4 9.3Z"/></svg>';
+
+let browserIdMemo = null;
+function browserId() {
+  if (browserIdMemo) return browserIdMemo;
+  let id = null;
+  try { id = localStorage.getItem(BROWSER_KEY); } catch {}
+  if (!id || !/^[A-Za-z0-9-]{8,36}$/.test(id)) {
+    id = typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : "b-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 12);
+    try { localStorage.setItem(BROWSER_KEY, id); } catch {}
+  }
+  return (browserIdMemo = id);
+}
+
+// 8초 안에 답이 없으면 실패로 처리
+function cmtFetch(url, opts = {}) {
+  const ctrl = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = setTimeout(() => { if (ctrl) ctrl.abort(); }, CMT_TIMEOUT);
+  return fetch(url, ctrl ? { ...opts, signal: ctrl.signal } : opts)
+    .then((res) => res.json())
+    .finally(() => clearTimeout(timer));
+}
+// 기존 요청 보내기와 같이 text/plain으로 보내서 CORS 사전 확인을 피해요
+const cmtPost = (body) => cmtFetch(NEWBIKEY_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) });
+
+// 시트에서 온 댓글 한 개를 화면용으로 정리 (형식이 이상하면 버림)
+function normCmt(c) {
+  if (!c || typeof c.id !== "string" || typeof c.content !== "string") return null;
+  const number = Number(c.number);
+  if (!Number.isInteger(number) || number < 1) return null;
+  return { id: c.id, number, content: c.content, createdAt: String(c.createdAt || ""), likes: Math.max(0, Number(c.likes) || 0), liked: c.liked === true };
+}
+const sortCmt = () => cmt.list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || b.number - a.number);
+
+// 1분 미만 → 방금 전 · N분 전 · N시간 전 · N일 전 · 7일부터는 날짜
+function relTime(iso) {
+  const t = new Date(iso);
+  if (isNaN(t)) return "";
+  const s = (Date.now() - t) / 1000;
+  if (s < 60) return "방금 전";
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  if (s < 86400 * 7) return `${Math.floor(s / 86400)}일 전`;
+  const p = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}.${p(t.getMonth() + 1)}.${p(t.getDate())}`;
+}
+
+function cmtFormHtml() {
+  return `
+    <form class="cmt-form" id="cmtForm" novalidate>
+      <label class="cmt-label" for="cmtInput">댓글</label>
+      <textarea class="textarea cmt-input" id="cmtInput" placeholder="댓글을 입력해주세요. (이름 입력 없이 익명으로 작성됩니다.)" aria-describedby="cmtMsg"></textarea>
+      <div class="field-msg" id="cmtMsg">
+        <span>고객사명 등 업무상 기밀은 적지 말아 주세요</span>
+        <span class="count" id="cmtCount">0/${CMT_MAX}</span>
+      </div>
+      <div class="cmt-actions">
+        <button class="btn-primary" type="submit" id="cmtSubmit" disabled>댓글 작성하기</button>
+      </div>
+    </form>`;
+}
+
+function cmtItemHtml(c) {
+  return `
+    <li class="cmt-item">
+      <div class="cmt-top">
+        <span class="cmt-who">익명 ${c.number}</span>
+        <time class="cmt-time" datetime="${esc(c.createdAt)}">${relTime(c.createdAt)}</time>
+        <button class="cmt-like" type="button" data-like="${esc(c.id)}" aria-pressed="${c.liked}" aria-label="좋아요 ${c.likes}개${c.liked ? " · 눌렀어요" : ""}"${cmt.liking.has(c.id) ? " disabled" : ""}>${heartSvg}<span>${c.likes}</span></button>
+      </div>
+      <p class="cmt-body">${esc(c.content)}</p>
+    </li>`;
+}
+
+function cmtListHtml() {
+  if (cmt.status === "loading") return '<div class="skel cmt-skel" aria-hidden="true"></div>'.repeat(2);
+  if (cmt.status === "error") return '<p class="d-empty">댓글을 불러오지 못했어요. 잠시 후 다시 시도해주세요.</p>';
+  const head = `<div class="cmt-head"><span class="cmt-total">댓글 ${cmt.list.length}개</span><span class="cmt-sort">최신순</span></div>`;
+  if (!cmt.list.length) return head + '<p class="d-empty">아직 댓글이 없어요. 이 용어에 대한 경험이나 팁을 가장 먼저 남겨보세요.</p>';
+  return head + `<ul class="cmt-items" aria-label="댓글 목록">${cmt.list.map(cmtItemHtml).join("")}</ul>`;
+}
+
+function paintCmtList() {
+  const host = document.getElementById("cmtList");
+  if (!host) return;
+  const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.like : null;
+  host.innerHTML = cmtListHtml();
+  if (focused) { const b = host.querySelector(`[data-like="${CSS.escape(focused)}"]`); if (b) b.focus(); }
+}
+
+function syncCmtForm() {
+  const ta = document.getElementById("cmtInput");
+  if (!ta) return;
+  const n = [...ta.value].length;
+  const count = document.getElementById("cmtCount");
+  count.textContent = `${n}/${CMT_MAX}`;
+  count.classList.toggle("over", n > CMT_MAX);
+  document.getElementById("cmtSubmit").disabled = cmt.sending || !ta.value.trim() || n > CMT_MAX;
+}
+
+// 목록만 시트에서 다시 받기
+function fetchComments() {
+  const id = cmt.term, seq = ++cmt.seq;
+  cmt.status = "loading"; paintCmtList();
+  cmtFetch(`${NEWBIKEY_API}?only=comments&term=${encodeURIComponent(id)}&browser=${encodeURIComponent(browserId())}`)
+    .then((res) => {
+      if (!res || !res.ok || !Array.isArray(res.comments)) throw new Error("bad response");
+      if (seq !== cmt.seq) return; // 그 사이 다른 용어로 옮겼으면 버림
+      cmt.list = res.comments.map(normCmt).filter(Boolean);
+      sortCmt();
+      cmt.status = "ready";
+    })
+    .catch(() => { if (seq === cmt.seq) cmt.status = "error"; })
+    .finally(() => { if (seq === cmt.seq) paintCmtList(); });
+}
+
+// 상세 화면을 그린 뒤 route()에서 불러요
+function loadComments(term) {
+  const box = document.getElementById("cmt");
+  if (!box || !term) return;
+  cmt.term = term.id; cmt.list = []; cmt.sending = false; cmt.liking.clear();
+  box.innerHTML = cmtFormHtml() + '<div class="cmt-list" id="cmtList"></div>';
+  fetchComments();
+}
+
+function submitComment() {
+  const ta = document.getElementById("cmtInput");
+  if (!ta || cmt.sending) return;
+  const content = ta.value.trim();
+  if (!content || [...ta.value].length > CMT_MAX) return;
+  const term = cmt.term;
+  cmt.sending = true; syncCmtForm();
+  document.getElementById("cmtSubmit").textContent = "작성 중…";
+  cmtPost({ type: "comment", term, content })
+    .then((res) => {
+      const c = res && res.ok ? normCmt(res.comment) : null;
+      if (!c) throw new Error((res && res.error) || "bad response");
+      if (cmt.term !== term) return;
+      ta.value = "";
+      if (cmt.status === "ready") { cmt.list = [c, ...cmt.list.filter((x) => x.id !== c.id)]; sortCmt(); paintCmtList(); }
+      else fetchComments(); // 목록을 아직 못 받았으면 새로 받아서 보여줌
+    })
+    .catch(() => toast("댓글 등록에 실패했어요. 잠시 후 다시 시도해주세요."))
+    .finally(() => {
+      cmt.sending = false;
+      const b = document.getElementById("cmtSubmit");
+      if (b) b.textContent = "댓글 작성하기";
+      syncCmtForm();
+    });
+}
+
+// 좋아요: 보내는 동안 버튼을 잠그고, 시트가 준 숫자로만 바꿔요 (취소 없음)
+function likeComment(id) {
+  const c = cmt.list.find((x) => x.id === id);
+  if (!c || c.liked || cmt.liking.has(id)) return;
+  const term = cmt.term;
+  cmt.liking.add(id); paintCmtList();
+  cmtPost({ type: "like", commentId: id, browser: browserId() })
+    .then((res) => {
+      if (!res || !res.ok) throw new Error((res && res.error) || "bad response");
+      c.likes = Math.max(0, Number(res.likes) || 0);
+      c.liked = res.liked !== false;
+    })
+    .catch(() => toast("좋아요를 보내지 못했어요. 잠시 후 다시 시도해주세요."))
+    .finally(() => { cmt.liking.delete(id); if (cmt.term === term) paintCmtList(); });
+}
+
+detailView.addEventListener("input", (e) => { if (e.target.id === "cmtInput") syncCmtForm(); });
+detailView.addEventListener("submit", (e) => { if (e.target.id !== "cmtForm") return; e.preventDefault(); submitComment(); });
+detailView.addEventListener("click", (e) => { const b = e.target.closest("[data-like]"); if (b) likeComment(b.dataset.like); });
 
 window.addEventListener("hashchange", route);
 route();
