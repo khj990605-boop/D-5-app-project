@@ -822,11 +822,19 @@ const NEWBIKEY_API = "https://script.google.com/macros/s/AKfycbwyeJk2ipw3e9of-lS
 /* ───────── 앱 시작 ─────────
    D: { CATEGORIES, TERMS, DETAILS, POPULAR, sheetRequests, sheetViews, source } */
 function startApp(D) {
-const { CATEGORIES, TERMS, DETAILS, POPULAR } = D;
+const { CATEGORIES, TERMS, DETAILS } = D;
+const MANUAL_POPULAR = D.POPULAR || []; // 용어집 시트 「많이 찾은 말 순위」 열로 정한 순서 (비상용)
 const REQUESTS = []; // 다른 신입이 요청한 단어. 시트에서 받은 요청 수로 채워요
 // 예시 수는 실제 예시 개수를 따른다
-// 조회수: 시트의 「조회수」 탭에서 받은 숫자 (못 받았으면 0)
-if (D.sheetViews && typeof D.sheetViews === "object") TERMS.forEach((t) => { t.views = Number(D.sheetViews[t.id]) || 0; });
+// 조회수: 「뉴비키 등록 요청」 시트의 「조회수」 탭에서 받은 숫자 (못 받았으면 0)
+//   views: 누적 조회수 → 「많이 찾은 순」 정렬 · weekViews: 이번 주(월요일부터) 조회수 → 「🔥 이번 주 많이 찾은 말」
+//   예전 형식(숫자 하나)도 읽어요
+if (D.sheetViews && typeof D.sheetViews === "object") TERMS.forEach((t) => {
+  const v = D.sheetViews[t.id];
+  if (typeof v === "number") { t.views = v; t.weekViews = 0; }
+  else if (v && typeof v === "object") { t.views = Number(v.total) || 0; t.weekViews = Number(v.week) || 0; }
+});
+TERMS.forEach((t) => { t.weekViews = t.weekViews || 0; });
 TERMS.forEach((t) => { const d = DETAILS[t.id]; t.examples = d && d.examples ? d.examples.length : 0; t.views = t.views || 0; });
 // 카테고리 용어 수는 실제 데이터에서 센다 (홈 숫자와 카테고리 화면 숫자가 항상 같게)
 CATEGORIES.forEach((c) => { c.count = TERMS.filter((t) => t.category === c.id).length; });
@@ -841,6 +849,13 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const catById = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]));
 const termById = Object.fromEntries(TERMS.map((t) => [t.id, t]));
+
+// 🔥 이번 주 많이 찾은 말: 이번 주 조회수가 많은 순으로 3개.
+// 이번 주 조회가 3개가 안 되면 용어집 시트의 「많이 찾은 말 순위」로 나머지를 채워요
+const weeklyTop = TERMS.filter((t) => t.weekViews > 0)
+  .sort((a, b) => b.weekViews - a.weekViews || b.views - a.views || a.name.localeCompare(b.name, "ko"))
+  .map((t) => t.id);
+const POPULAR = [...weeklyTop, ...MANUAL_POPULAR.filter((id) => termById[id] && !weeklyTop.includes(id))].slice(0, 3);
 const isNew = (d) => (TODAY - new Date(d)) / 86400000 <= 7;
 const isMobile = () => window.matchMedia("(max-width: 767px)").matches;
 const arrow = '<svg class="i i-16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
@@ -1415,6 +1430,7 @@ function recordView(t) {
   seen[t.id] = today;
   try { localStorage.setItem(VIEWED_KEY, JSON.stringify(seen)); } catch {}
   t.views = (t.views || 0) + 1;
+  t.weekViews = (t.weekViews || 0) + 1;
   fetch(REQUEST_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ type: "view", term: t.id }) }).catch(() => {});
 }
 
