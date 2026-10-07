@@ -744,8 +744,6 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
   <div id="drawerCats"></div>
   <div class="drawer-label">내 활동</div>
   <button class="nav-item" type="button" data-action="request">요청하기</button>
-  <button class="nav-item" type="button" data-action="mine">내가 요청한 용어</button>
-  <button class="nav-item" type="button" data-action="saved">저장한 용어</button>
 </nav>
 
 <div class="sm-scrim" id="smScrim" hidden></div>
@@ -799,11 +797,11 @@ const NEWBIKEY_API = "https://script.google.com/macros/s/AKfycbwyeJk2ipw3e9of-lS
       const requests = res && res.ok && Array.isArray(res.requests) ? res.requests : null;
       if (res && res.ok && valid(res.terms)) {
         try { localStorage.setItem(CACHE_KEY, JSON.stringify(res.terms)); } catch {}
-        return { ...pick(res.terms), sheetRequests: requests, source: "sheet" };
+        return { ...pick(res.terms), sheetRequests: requests, sheetViews: res.views || null, source: "sheet" };
       }
-      return { sheetRequests: requests, source: "" };
+      return { sheetRequests: requests, sheetViews: res && res.ok ? res.views || null : null, source: "" };
     })
-    .catch(() => ({ sheetRequests: null, source: "" }))
+    .catch(() => ({ sheetRequests: null, sheetViews: null, source: "" }))
     .then((D) => {
       clearTimeout(timer);
       if (!D.source) {
@@ -822,11 +820,13 @@ const NEWBIKEY_API = "https://script.google.com/macros/s/AKfycbwyeJk2ipw3e9of-lS
 })();
 
 /* ───────── 앱 시작 ─────────
-   D: { CATEGORIES, TERMS, DETAILS, POPULAR, sheetRequests, source } */
+   D: { CATEGORIES, TERMS, DETAILS, POPULAR, sheetRequests, sheetViews, source } */
 function startApp(D) {
 const { CATEGORIES, TERMS, DETAILS, POPULAR } = D;
 const REQUESTS = []; // 다른 신입이 요청한 단어. 시트에서 받은 요청 수로 채워요
 // 예시 수는 실제 예시 개수를 따른다
+// 조회수: 시트의 「조회수」 탭에서 받은 숫자 (못 받았으면 0)
+if (D.sheetViews && typeof D.sheetViews === "object") TERMS.forEach((t) => { t.views = Number(D.sheetViews[t.id]) || 0; });
 TERMS.forEach((t) => { const d = DETAILS[t.id]; t.examples = d && d.examples ? d.examples.length : 0; t.views = t.views || 0; });
 // 카테고리 용어 수는 실제 데이터에서 센다 (홈 숫자와 카테고리 화면 숫자가 항상 같게)
 CATEGORIES.forEach((c) => { c.count = TERMS.filter((t) => t.category === c.id).length; });
@@ -1228,10 +1228,7 @@ function navHtml(currentCat) {
     orderedCats.map((c) => `
       <button class="nav-item" type="button" data-cat="${c.id}"${c.id === currentCat ? ' aria-current="page"' : ""}>
         <span class="dot dot-${c.color}" aria-hidden="true"></span>${esc(c.name)}<span class="cat-count">${c.count}</span>
-      </button>`).join("") +
-    `<div class="drawer-label">내 활동</div>
-     <button class="nav-item" type="button" data-action="mine">내가 요청한 용어</button>
-     <button class="nav-item" type="button" data-action="saved">저장한 용어</button>`;
+      </button>`).join("");
 }
 
 function renderDetail(t) {
@@ -1404,6 +1401,22 @@ async function loadRequestCounts() {
 const hadOutbox = outbox.length > 0;
 applyRequestCounts(D.sheetRequests, false);
 flushOutbox().then(() => { if (hadOutbox || !D.sheetRequests) loadRequestCounts(); });
+
+/* ───────── 조회수 기록 ─────────
+   상세를 열면 뒤에서 조용히 "한 번 봤어요"를 보내요. 응답을 기다리지 않고, 실패해도 화면엔 영향 없어요
+   같은 브라우저에서 같은 용어는 하루에 한 번만 세요. 누가 봤는지는 보내지 않아요 */
+const VIEWED_KEY = "newbikey.viewed";
+function recordView(t) {
+  const today = new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(VIEWED_KEY) || "{}") || {}; } catch {}
+  if (seen[t.id] === today) return;
+  Object.keys(seen).forEach((k) => { if (seen[k] !== today) delete seen[k]; }); // 오늘 기록만 남겨요
+  seen[t.id] = today;
+  try { localStorage.setItem(VIEWED_KEY, JSON.stringify(seen)); } catch {}
+  t.views = (t.views || 0) + 1;
+  fetch(REQUEST_API, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ type: "view", term: t.id }) }).catch(() => {});
+}
 
 const WHERE_CHIPS = ["팀 회의", "메신저", "고객 미팅", "메일", "선배와 대화"];
 const WORD_MAX = 30;
@@ -1660,6 +1673,7 @@ function route() {
     title = `${catId === "all" ? "전체 용어" : catById[catId].name} · 뉴비키`;
   } else if (term) {
     detailView.innerHTML = renderDetail(term);
+    recordView(term);
     view = detailView; catNow = term.category; title = `${term.name} · 뉴비키`; focusEl = "#dName";
   } else if (h === "#notfound") {
     history.replaceState(null, "", location.pathname + location.search);
