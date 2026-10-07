@@ -42,6 +42,7 @@
 | 파일 | 역할 |
 |---|---|
 | `index.html` | 화면 (디자인 · 검색 · 화면 이동) |
+| `assets/` | 로고(`logo.png`, `logo-icon.png`, `logo-stacked.png`)와 탭 아이콘(`favicon.png`, `apple-touch-icon.png`). index.html이 불러 써요 |
 | `data.js` | **비상용** 용어 데이터. 구글 시트를 읽지 못할 때만 써요. 엑셀에서 자동으로 만들어지니 직접 고치지 않아요 |
 | `data/회계법인_용어집.xlsx` | 예전 원본(2026.10.05까지). 지금 원본은 구글 시트예요. 비상용 `data.js`를 새로 만들 때만 써요 |
 | `scripts/build_data.py` | 엑셀을 `data.js`로 바꾸는 스크립트 |

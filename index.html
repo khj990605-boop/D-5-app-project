@@ -5,12 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="뉴비키 · 신입사원 관점의 사내 은어·용어 사전">
 <title>뉴비키</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <!--
   뉴비키 (2026 DISCOVER D-5조)
   - 기준 문서: 프로젝트의 「뉴비키 DESIGN.md」, 「뉴비키 화면 흐름.md(FLOW.md)」
   - 빌드 없이 index.html + data.js 두 파일로 동작해요. 브라우저로 열거나 Vercel에 그대로 올리면 돼요.
   - 용어 데이터: data.js  ← data/회계법인_용어집.xlsx 를 scripts/build_data.py로 변환해서 만들어요
                  (용어를 고칠 때는 엑셀을 고치고 스크립트를 다시 실행하세요. data.js를 직접 고치지 않아요)
+  - 로고·아이콘: assets/ 폴더 (logo.png 상단 바, favicon.png 탭 아이콘) — index.html과 같이 올려야 해요
+  - 시각 디자인: DESIGN.md 10.06 시각 수정본 (로고 교체 · 검색창 강조 · 웜톤 보조 배경)
   - 화면(주소): 홈(#) · 용어 상세(#term-아이디) · 카테고리(#cat-아이디, #cat-all)
                · 검색 결과 없음(#notfound) · 등록 요청 폼(#request) · 검색창(Ctrl K, 모달)
   - 파일 안 위치
@@ -24,41 +28,52 @@
 /* 레이아웃: 모바일 우선 · 상단 바 고정 → 검색 히어로 → 카테고리 카드(1/2/3열) → 최근 추가 용어. DESIGN.md §12 토큰 그대로 */
 :root {
   color-scheme: light;
+  /* 브랜드 색 — DESIGN.md(10.06 시각 수정본) §12 */
   --color-primary: #D04A02;
   --color-primary-hover: #B03E02;
   --color-primary-active: #8F3201;
-  --color-primary-subtle: #FDF1EB;
+  --color-primary-subtle: #FFF1E8;
+  --color-primary-line: #F2B38E;
   --color-tangerine: #EB8C00;
   --color-yellow: #FFB600;
   --color-red: #E0301E;
   --color-rose: #DB536A;
 
+  /* 기본 색 — 흰색 위주 + 연한 피치·크림 보조 배경 */
   --color-bg: #FFFFFF;
-  --color-bg-subtle: #F7F7F8;
-  --color-bg-muted: #EFEFF1;
-  --color-border: #E4E4E7;
-  --color-border-strong: #D1D1D6;
-  --color-text: #000000;
+  --color-bg-soft: #FFFBF8;
+  --color-bg-subtle: #FCF7F3;
+  --color-bg-muted: #F8F3EF;
+  --color-bg-chip: #FFF6F0;
+  --color-border: #E9E3DD;
+  --color-border-strong: #D8CEC6;
+  --color-text: #111111;
   --color-text-body: #27272A;
-  --color-text-secondary: #52525B;
-  --color-text-tertiary: #71717A;
+  --color-text-secondary: #5C5F66;
+  --color-text-tertiary: #7A7D85;
   --color-text-disabled: #A1A1AA;
+  --color-decorative: rgba(208, 74, 2, 0.07);
 
+  /* 상태 색 */
   --color-danger: #E0301E;
   --color-success: #1F8A4C;
   --color-success-bg: #E8F5EE;
   --color-warning-bg: #FFF6DB;
+  --color-pending-bg: #F1F3F5;
   --color-toast: #27272A;
   --color-on-dark: #FFFFFF;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  /* 모서리 */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
   --radius-full: 9999px;
 
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.14);
+  /* 그림자 */
+  --shadow-sm: 0 2px 8px rgba(17, 17, 17, 0.04);
+  --shadow-md: 0 12px 32px rgba(208, 74, 2, 0.10);
+  --shadow-lg: 0 18px 48px rgba(17, 17, 17, 0.14);
 
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
                "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
@@ -97,11 +112,9 @@ h1, h2 { text-wrap: balance; }
 }
 .topbar .wrap { height: 100%; display: flex; align-items: center; gap: 8px; }
 .logo { display: flex; align-items: center; gap: 8px; font-size: 18px; line-height: 26px; font-weight: 700; color: var(--color-text); margin-right: auto; }
-.logo-mark {
-  width: 28px; height: 28px; border-radius: var(--radius-sm);
-  background: var(--color-primary); color: var(--color-on-dark);
-  display: grid; place-items: center; font-size: 14px; font-weight: 700;
-}
+/* 로고: 겹쳐진 카드 3장 + 검정 워드마크 이미지 (assets/logo.png) — 옛 '뉴' 사각형 로고는 쓰지 않아요 */
+.logo-img { display: block; height: 28px; width: auto; }
+@media (min-width: 768px) { .logo-img { height: 32px; } }
 .btn {
   height: 40px; padding: 0 12px; border-radius: var(--radius-md);
   display: inline-flex; align-items: center; gap: 8px;
@@ -109,8 +122,12 @@ h1, h2 { text-wrap: balance; }
   border: 1px solid transparent; background: transparent;
   transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
-.btn-secondary { background: var(--color-bg); border-color: var(--color-border); color: var(--color-text); }
-.btn-secondary:hover { border-color: var(--color-border-strong); background: var(--color-bg-subtle); }
+.btn-secondary { background: var(--color-bg); border-color: var(--color-primary-line); color: var(--color-text); }
+.btn-secondary:hover { border-color: var(--color-primary); background: var(--color-bg-chip); box-shadow: var(--shadow-sm); }
+/* 상단 바 '요청하기': 홈에서는 주요 버튼, 다른 화면에서는 보조 버튼 (§6-9) */
+.req-top { font-weight: 600; }
+body[data-view="home"] .req-top { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-dark); }
+body[data-view="home"] .req-top:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); box-shadow: var(--shadow-sm); }
 .btn-text { color: var(--color-text-secondary); }
 .btn-text:hover { background: var(--color-bg-subtle); }
 .kbd {
@@ -122,41 +139,50 @@ h1, h2 { text-wrap: balance; }
   display: grid; place-items: center; color: var(--color-text-secondary);
 }
 .icon-btn:hover { background: var(--color-bg-subtle); }
-.avatar {
-  width: 36px; height: 36px; border-radius: var(--radius-full);
-  background: var(--color-bg-muted); color: var(--color-text-secondary);
-  display: grid; place-items: center; font-size: 14px; font-weight: 600; border: 0;
-}
 .desk-only { display: none; }
+/* 휴대폰 홈 상단 바는 로고 + ☰만 (검색창이 바로 아래에 있어서) */
+body[data-view="home"] .mob-search { display: none; }
 svg.i { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 svg.i-16 { width: 16px; height: 16px; }
 
 /* ── 히어로 + 검색 §2-1 ── */
-.hero { padding-block: 16px 24px; display: flex; flex-direction: column; gap: 16px; }
-.hero-text { order: 2; display: flex; flex-direction: column; gap: 4px; }
+/* 휴대폰 홈: 제목 → 설명 → 검색창 → 인기 용어 → 카테고리 (DESIGN.md §5-4 모바일 홈 최종 확정) */
+.hero-band { position: relative; background: var(--color-bg-soft); border-bottom: 1px solid var(--color-bg-muted); }
+.hero { position: relative; z-index: 1; padding-block: 20px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; }
+.hero-text { display: flex; flex-direction: column; gap: 4px; }
 .hero-title { font-size: 20px; line-height: 28px; font-weight: 700; color: var(--color-text); }
 .hero-desc { font-size: 14px; line-height: 20px; color: var(--color-text-secondary); }
-.hero-desc b { color: var(--color-text); font-weight: 600; font-variant-numeric: tabular-nums; }
-.search { order: 1; position: relative; }
+.hero-desc b { color: var(--color-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+.search { position: relative; width: 100%; }
+/* 히어로 양옆 로고 카드 장식 — PC·태블릿만, 휴대폰에서는 그리지 않아요 */
+.hero-deco { display: none; }
 .search label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--color-text-tertiary); pointer-events: none; }
+.search > .search-icon { color: var(--color-primary); left: 20px; }
+/* 홈 메인 검색창: 연한 주황 테두리 2px + 부드러운 그림자 (§6-3). 휴대폰은 그림자를 약하게 */
 .search input {
-  width: 100%; height: 52px; border-radius: var(--radius-full);
-  border: 1.5px solid var(--color-border-strong); background: var(--color-bg);
-  padding: 0 20px 0 48px; font: inherit; font-size: 16px; color: var(--color-text);
+  width: 100%; height: 56px; border-radius: var(--radius-full);
+  border: 2px solid var(--color-primary-line); background: var(--color-bg);
+  padding: 0 20px 0 52px; font: inherit; font-size: 16px; color: var(--color-text);
+  box-shadow: var(--shadow-sm);
   transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
 }
 .search input::placeholder { color: var(--color-text-tertiary); }
-.search input:hover { border-color: var(--color-text-disabled); }
-.search input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 4px var(--color-primary-subtle); }
+.search input:hover { border-color: var(--color-primary); }
+.search input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 4px var(--color-primary-subtle), var(--shadow-sm); }
 
-.popular { order: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 14px; line-height: 20px; }
-.popular-label { color: var(--color-text-secondary); font-weight: 500; margin-right: 4px; }
-.pop-item {
-  display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 8px;
-  border-radius: var(--radius-sm); border: 0; background: transparent; color: var(--color-text-body);
+/* 인기 용어: '🔥 이번 주 많이 찾은 말' 라벨 칩 + 순위 칩 (§6-6) */
+.popular { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; font-size: 13px; line-height: 18px; }
+.popular-label {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 12px; border-radius: var(--radius-full);
+  background: var(--color-bg-chip); color: var(--color-primary); font-weight: 600;
 }
-.pop-item:hover { background: var(--color-bg-subtle); color: var(--color-primary); }
+.pop-item {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px;
+  border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text-body); font-weight: 500;
+  transition: border-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.pop-item:hover { border-color: var(--color-primary-line); color: var(--color-primary); }
 .pop-rank { color: var(--color-primary); font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* ── 섹션 ── */
@@ -181,7 +207,6 @@ svg.i-16 { width: 16px; height: 16px; }
 .cat-count { font-size: 13px; line-height: 18px; color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; }
 .cat-terms { font-size: 15px; line-height: 24px; color: var(--color-text-secondary); }
 .cat-more { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--color-primary); display: inline-flex; align-items: center; gap: 4px; }
-.cat-card.featured { background: var(--color-bg-subtle); }
 .cat-card.featured .cat-hint { font-size: 13px; line-height: 18px; color: var(--color-text-tertiary); }
 
 .dot { width: 8px; height: 8px; border-radius: var(--radius-full); flex: none; }
@@ -215,7 +240,7 @@ svg.i-16 { width: 16px; height: 16px; }
 .term-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; line-height: 18px; color: var(--color-text-tertiary); margin-top: auto; padding-top: 4px; }
 .rv { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-sm); font-size: 12px; line-height: 16px; font-weight: 500; }
 .rv-approved { background: var(--color-success-bg); color: var(--color-success); }
-.rv-pending { background: var(--color-bg-muted); color: var(--color-text-secondary); }
+.rv-pending { background: var(--color-pending-bg); color: var(--color-text-secondary); }
 .rv-needs_fix { background: var(--color-warning-bg); color: var(--color-text); }
 
 .request-banner {
@@ -241,7 +266,7 @@ footer { padding-block: 32px 48px; color: var(--color-text-tertiary); font-size:
   border: 0; background: transparent; text-align: left; font-size: 15px; color: var(--color-text-body); width: 100%;
 }
 .nav-item:hover { background: var(--color-bg-muted); }
-.nav-item[aria-current="page"] { background: var(--color-primary-subtle); color: var(--color-primary); font-weight: 600; }
+.nav-item[aria-current="page"] { background: var(--color-primary-subtle); color: var(--color-primary); font-weight: 600; box-shadow: inset 3px 0 0 var(--color-primary); border-radius: 0 var(--radius-md) var(--radius-md) 0; }
 .nav-item .cat-count { margin-left: auto; }
 
 /* ── 토스트 §6-7 ── */
@@ -261,13 +286,19 @@ footer { padding-block: 32px 48px; color: var(--color-text-tertiary); font-size:
   .wrap { padding-inline: 24px; }
   .desk-only { display: inline-flex; align-items: center; justify-content: center; }
   .mob-only { display: none; }
-  .hero { padding-block: 64px 32px; align-items: center; text-align: center; gap: 24px; }
-  .hero-text { order: 1; gap: 8px; }
+  .hero { padding-block: 64px 48px; gap: 24px; }
+  .hero-text { gap: 8px; }
   .hero-title { font-size: 36px; line-height: 44px; }
   .hero-desc { font-size: 17px; line-height: 28px; }
-  .search { order: 2; width: 100%; max-width: 640px; }
-  .search input { height: 56px; font-size: 17px; }
-  .popular { order: 3; justify-content: center; }
+  .search { max-width: 640px; }
+  .search input { height: 80px; font-size: 17px; padding-left: 60px; box-shadow: var(--shadow-md); }
+  .search input:focus { box-shadow: 0 0 0 4px var(--color-primary-subtle), var(--shadow-md); }
+  .search > .search-icon { left: 24px; width: 24px; height: 24px; }
+  .popular { font-size: 14px; line-height: 20px; }
+  .hero-deco { display: block; position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+  .hero-deco span { position: absolute; width: 180px; height: 230px; border-radius: 28px; background: var(--color-decorative); transform: skewY(-12deg); }
+  .hero-deco .l1 { left: -60px; top: 70px; } .hero-deco .l2 { left: 0; top: 110px; } .hero-deco .l3 { left: 60px; top: 150px; }
+  .hero-deco .r1 { right: 60px; top: 30px; } .hero-deco .r2 { right: 0; top: 70px; } .hero-deco .r3 { right: -60px; top: 110px; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
   .request-banner { flex-direction: row; align-items: center; justify-content: space-between; padding: 24px; }
 }
@@ -287,8 +318,9 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 }
 .clear-btn:hover { background: var(--color-bg-muted); color: var(--color-text-body); }
 .search > .clear-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+.search > .clear-btn::before { content: ""; position: absolute; left: -6px; top: 10px; bottom: 10px; width: 1px; background: var(--color-border); }
 .search input { padding-right: 52px; }
-@media (min-width: 768px) { .search > .clear-btn { right: 8px; } }
+@media (min-width: 768px) { .search > .clear-btn { right: 16px; } .search input { padding-right: 72px; } }
 
 /* ── 검색 후보 목록 §2-4 ── */
 .search { z-index: 15; }
@@ -368,7 +400,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 .nf-asked b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .nf-cta { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
 .btn-primary {
-  height: 48px; padding: 0 24px; border-radius: var(--radius-md); border: 0;
+  height: 44px; padding: 0 24px; border-radius: var(--radius-md); border: 0;
   background: var(--color-primary); color: var(--color-on-dark); font-size: 15px; line-height: 24px; font-weight: 600;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; max-width: 320px;
   transition: background var(--duration-fast) var(--ease);
@@ -455,7 +487,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
   transition: background var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease);
 }
 .f-chip:hover { border-color: var(--color-border-strong); background: var(--color-bg-subtle); }
-.f-chip[aria-pressed="true"] { background: var(--color-primary-subtle); border-color: var(--color-primary); color: var(--color-primary); }
+.f-chip[aria-pressed="true"] { background: var(--color-bg); border-color: var(--color-primary); color: var(--color-primary); font-weight: 600; }
 .rq-dup { flex-direction: column; align-items: flex-start; gap: 4px; }
 .rq-dup .link { padding: 4px 0; }
 .anon {
@@ -477,7 +509,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 .switch[aria-checked="true"]::after { transform: translateX(20px); }
 .rq-actions { display: flex; align-items: center; gap: 8px; }
 .rq-actions .btn-primary { flex: 1; width: auto; max-width: none; }
-.rq-actions .btn-secondary { flex: none; white-space: nowrap; height: 48px; padding: 0 20px; }
+.rq-actions .btn-secondary { flex: none; white-space: nowrap; height: 44px; padding: 0 20px; }
 .rq-skip { align-self: center; }
 @media (min-width: 768px) {
   .rq { padding-block: 48px 96px; }
@@ -511,7 +543,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 .d-empty { font-size: 15px; line-height: 24px; color: var(--color-text-tertiary); }
 
 .use-box {
-  background: var(--color-bg-subtle); border-left: 3px solid var(--color-primary); border-radius: var(--radius-lg);
+  background: var(--color-bg-muted); border-left: 4px solid var(--color-primary); border-radius: var(--radius-lg);
   padding: 8px 20px; display: flex; flex-direction: column;
 }
 .use-item { display: flex; flex-direction: column; gap: 4px; padding-block: 12px; }
@@ -557,7 +589,9 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 .hist time { color: var(--color-text-tertiary); font-variant-numeric: tabular-nums; }
 
 /* 왼쪽 메뉴 (GitBook) · 오른쪽 목차 */
-.side-nav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px); align-self: start; background: var(--color-bg-subtle); border-radius: var(--radius-lg); padding: 8px; flex-direction: column; gap: 2px; }
+.side-nav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px); align-self: start; background: var(--color-bg-subtle); border-radius: var(--radius-xl); padding: 12px 12px 12px 0; flex-direction: column; gap: 2px; }
+.side-nav .drawer-label { padding-left: 16px; }
+.side-nav .nav-item { padding-left: 16px; }
 .side-nav .drawer-label:first-child { padding-top: 4px; }
 .toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 76px); align-self: start; flex-direction: column; gap: 2px; }
 .toc-title { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--color-text-tertiary); padding: 4px 12px 8px; }
@@ -619,16 +653,13 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 <body>
 <header class="topbar">
   <div class="wrap">
-    <a class="logo" href="#" data-nav="home" aria-label="뉴비키 홈">
-      <span class="logo-mark" aria-hidden="true">뉴</span>뉴비키
-    </a>
+    <a class="logo" href="#" data-nav="home" aria-label="뉴비키 홈"><img class="logo-img" src="assets/logo.png" alt="뉴비키" width="282" height="96"></a>
     <button class="btn btn-text desk-only" id="openSearch" type="button" aria-label="검색 열기 (Ctrl K)">
       <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       검색 <span class="kbd" id="kbdHint">Ctrl K</span>
     </button>
-    <button class="btn btn-secondary desk-only" type="button" data-action="request">요청하기</button>
-    <button class="avatar desk-only" type="button" aria-label="내 프로필">혜</button>
-    <button class="icon-btn mob-only" id="mobSearchBtn" type="button" aria-label="검색 열기">
+    <button class="btn btn-secondary desk-only req-top" type="button" data-action="request">요청하기</button>
+    <button class="icon-btn mob-only mob-search" id="mobSearchBtn" type="button" aria-label="검색 열기">
       <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     </button>
     <button class="icon-btn mob-only" id="menuBtn" type="button" aria-label="메뉴 열기" aria-expanded="false" aria-controls="drawer">
@@ -638,6 +669,8 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 </header>
 
 <main id="top">
+  <div class="hero-band">
+  <div class="hero-deco" aria-hidden="true"><span class="l1"></span><span class="l2"></span><span class="l3"></span><span class="r1"></span><span class="r2"></span><span class="r3"></span></div>
   <section class="wrap hero" aria-labelledby="heroTitle">
     <div class="hero-text">
       <h1 class="hero-title" id="heroTitle">오늘 들은 그 단어, 찾아볼까요?</h1>
@@ -660,6 +693,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
       <div id="popularList" style="display:contents"></div>
     </div>
   </section>
+  </div>
 
   <section class="wrap section" aria-labelledby="catTitle">
     <div class="section-head">
@@ -700,7 +734,7 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; appe
 <div class="drawer-scrim" id="scrim" hidden></div>
 <nav class="drawer" id="drawer" aria-label="메뉴" hidden>
   <div class="drawer-head">
-    <span class="logo"><span class="logo-mark" aria-hidden="true">뉴</span>뉴비키</span>
+    <span class="logo"><img class="logo-img" src="assets/logo.png" alt="뉴비키" width="282" height="96"></span>
     <button class="icon-btn" id="closeMenu" type="button" aria-label="메뉴 닫기">
       <svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
@@ -1636,6 +1670,7 @@ function route() {
   $("#drawerCats").innerHTML = drawerCatsHtml(catNow);
   if (view === homeView) $("#drawerHome").setAttribute("aria-current", "page"); else $("#drawerHome").removeAttribute("aria-current");
   document.title = title;
+  document.body.dataset.view = view === homeView ? "home" : "page"; // 상단 바 '요청하기' 강조 · 휴대폰 홈의 🔍 숨김
   if (view !== homeView || h === "" || h === "#") window.scrollTo(0, 0);
   if (view === requestView) paintRequest();
   if (focusEl) $(focusEl).focus({ preventScroll: true });
